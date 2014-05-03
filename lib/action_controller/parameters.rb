@@ -60,6 +60,13 @@ module ActionController
 
     alias :required :require
 
+    def ensure(*keys)
+      keys.each do |key|
+        ensure_key(self, key)
+      end
+      self
+    end
+
     def permit(*filters)
       params = self.class.new
 
@@ -126,6 +133,25 @@ module ActionController
           value
         else
           self.class.new(value)
+        end
+      end
+
+      def ensure_key(params_node, key, lineage = nil)
+        case key
+        when Symbol, String
+          key_lineage = lineage.present? ? "#{lineage} => #{key}" : key.to_s
+          raise(ActionController::ParameterMissing.new(key_lineage)) unless params_node[key].present?
+        when Hash then
+          ensure_hash = key.with_indifferent_access
+
+          ensure_hash.each do |ensure_key, ensure_value|
+            ensure_key(params_node, ensure_key, lineage)
+
+            child_params_node = params_node[ensure_key]
+            key_lineage = lineage.present? ? "#{lineage} => #{ensure_key}" : ensure_key
+            raise(ActionController::ParameterMissing.new("#{key_lineage} => #{ensure_value}")) unless child_params_node.is_a? Hash
+            ensure_key(child_params_node, ensure_value, key_lineage)
+          end
         end
       end
 
